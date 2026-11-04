@@ -54,6 +54,9 @@ public class GeoService extends Service implements LocationListener {
     private double lastBest = Double.MAX_VALUE;
     private Runnable tick;
 
+    /** 最近一次定位结果，列表里显示距离要用，和判定共用同一次刷新 */
+    public static volatile Location lastLoc;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -156,10 +159,10 @@ public class GeoService extends Service implements LocationListener {
             if (d < min) min = d;
         }
         lastBest = min;
-        if (min > 10_000) return 300_000L;
-        if (min > 5_000) return 60_000L;
-        if (min > 3_000) return 30_000L;
-        return 10_000L;
+        if (min > 10_000) return 30_000L;   // 10 公里外：网络定位，30 秒一次
+        if (min > 5_000) return 15_000L;    // 5-10 公里：网络定位，15 秒一次
+        if (min > 3_000) return 10_000L;    // 3-5 公里：GPS，10 秒一次
+        return 3_000L;                      // 3 公里内：GPS，3 秒一次
     }
 
     private void apply(long iv) {
@@ -194,7 +197,7 @@ public class GeoService extends Service implements LocationListener {
     private boolean useGps() {
         if (last == null) return true;   // 头一次先把位置定准
         float acc = last.hasAccuracy() ? last.getAccuracy() : 500f;
-        return (lastBest - acc) <= 10_000;
+        return (lastBest - acc) <= 5_000;   // 5 公里内用 GPS
     }
 
     private void stopUpdates() {
@@ -209,6 +212,7 @@ public class GeoService extends Service implements LocationListener {
     public void onLocationChanged(Location loc) {
         if (loc == null) return;
         last = loc;
+        lastLoc = loc;
         List<Todo> list = activeLocations();
         float acc = loc.hasAccuracy() ? loc.getAccuracy() : 100f;
         for (Todo t : list) {

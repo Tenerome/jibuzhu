@@ -45,6 +45,18 @@ public class MainActivity extends Activity {
     private View drawerPanel;
     private boolean drawerOpen;
     private ScrollView scrollView;
+    /** 待刷新距离的列表行：{TextView, Todo} */
+    private final List<Object[]> distRows = new ArrayList<>();
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable distTick = new Runnable() {
+        @Override
+        public void run() {
+            for (Object[] r : distRows) {
+                ((TextView) r[0]).setText(condition((Todo) r[1]));
+            }
+            ui.postDelayed(this, 1000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle b) {
@@ -71,6 +83,12 @@ public class MainActivity extends Activity {
         refresh();
         applyFocus();
         syncGeo();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ui.removeCallbacks(distTick);
     }
 
     private void askPerms() {
@@ -363,10 +381,19 @@ public class MainActivity extends Activity {
         // 数据变了让桌面组件跟着变
         TodoWidget.refreshAll(this);
         listBox.removeAllViews();
+        distRows.clear();
         paintTab(tabTodo, tab == 0);
         paintTab(tabPlan, tab == 1);
         if (tab == 0) showTodos();
         else showPlans();
+        startDistTick();
+    }
+
+    /** 只有存在定位类待办时才定期刷新距离，列表里没有就不跑 */
+    private void startDistTick() {
+        ui.removeCallbacks(distTick);
+        if (distRows.isEmpty() || tab != 0) return;
+        ui.postDelayed(distTick, 1000);
     }
 
     private void paintTab(TextView tv, boolean on) {
@@ -414,6 +441,8 @@ public class MainActivity extends Activity {
             TextView cond = Ui.text(this, condition(t), 12, Theme.sub(this));
             cond.setPadding(0, Theme.dp(this, 4), 0, 0);
             body.addView(cond);
+            // 定位类才需要实时刷距离
+            if (t.isLocation() || t.isCheckin()) distRows.add(new Object[]{cond, t});
             row.addView(body, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             card.addView(row);
 
@@ -448,27 +477,29 @@ public class MainActivity extends Activity {
 
     private String condition(Todo t) {
         StringBuilder s = new StringBuilder();
-        if ("checkin".equals(t.kind)) {
+        boolean loc = t.isLocation() || t.isCheckin();
+        if (loc) {
             s.append("到 ").append(t.place.isEmpty() ? "选定地点" : t.place);
-            if (!t.winStart.equals("00:00") || !t.winEnd.equals("23:59")) {
-                s.append("  ").append(t.winStart).append("-").append(t.winEnd);
-            }
-            s.append(" 自动打卡");
-            if (t.fallback != null && !t.fallback.isEmpty()) {
-                s.append("  ·  兜底 ").append(t.fallback);
-            }
-        } else if (t.isLocation()) {
-            s.append("到 ").append(t.place.isEmpty() ? "选定地点" : t.place);
-            if (!t.winStart.equals("00:00") || !t.winEnd.equals("23:59")) {
-                s.append("  ").append(t.winStart).append("-").append(t.winEnd);
-            }
-            s.append("  ·  ").append(t.radius).append("米内");
+            s.append(t.isCheckin() ? " 自动打卡" : " 提醒");
         } else {
             s.append(t.winStart).append("  提醒");
         }
         s.append(t.isRepeat() ? "  ·  每天" : "  ·  单次");
         if (!t.ring.isEmpty()) s.append("  ·  自定义铃声");
+        if (loc) {
+            String d = distanceText(t);
+            if (!d.isEmpty()) s.append("  ").append(d);
+        }
         return s.toString();
+    }
+
+    /** 距离文案：1000 米以上换成公里 */
+    private String distanceText(Todo t) {
+        android.location.Location l = GeoService.lastLoc;
+        if (l == null) return "";
+        double d = Util.distance(l.getLatitude(), l.getLongitude(), t.lat, t.lng);
+        if (d >= 1000) return String.format(Locale.US, "距离 %.1f km", d / 1000.0);
+        return "距离 " + ((int) d) + " m";
     }
 
     private void complete(Todo t) {
