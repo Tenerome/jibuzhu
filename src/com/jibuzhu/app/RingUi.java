@@ -122,7 +122,7 @@ public final class RingUi {
         if (nm != null) nm.cancel((int) (todoId % 100000) + 1000);
     }
 
-    /** check 掉本次提醒：单次待办完成后删除，重复待办变灰置底到次日 0 点 */
+    /** check 掉本次提醒：单次待办完成后删除（先记回收站），重复待办变灰置底到次日 0 点 */
     public static void finishTodo(Context ctx, long todoId) {
         Todo t = Store.get(ctx).todo(todoId);
         if (t == null) return;
@@ -132,6 +132,7 @@ public final class RingUi {
             Store.get(ctx).saveTodo(t);
         } else {
             AlarmScheduler.cancel(ctx, t.id);
+            Store.get(ctx).trashAdd("待办", t.title, subText(t, null) + "  ·  已完成");
             Store.get(ctx).deleteTodo(t.id);
         }
     }

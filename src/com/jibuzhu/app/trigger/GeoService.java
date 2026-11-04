@@ -195,12 +195,12 @@ public class GeoService extends Service implements LocationListener {
                     // 打卡：锁屏就走闹钟式提醒（点「去打卡」后跳 WeLink）；
                     // 没锁屏直接跳过去，不响铃。
                     if (locked()) {
-                        AlarmReceiver.showFullScreen(this, t, "geo");
+                        AlarmScheduler.fireSoon(this, t, "geo");
                     } else {
                         Checkin.open(this);
                     }
                 } else {
-                    AlarmReceiver.showFullScreen(this, t, "geo");
+                    AlarmScheduler.fireSoon(this, t, "geo");
                 }
             }
         }

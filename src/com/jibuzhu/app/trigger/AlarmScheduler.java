@@ -87,6 +87,39 @@ public class AlarmScheduler {
         return (int) (id * 10 + ("fallback".equals(mode) ? 1 : 0));
     }
 
+    /**
+     * 2 秒后立刻触发一次提醒（定位命中时用）。
+     *
+     * 为什么不直接在服务里 startForegroundService/startActivity：应用在后台时
+     * Android 12+ 会拦下这些调用，锁屏状态下尤其明显（界面不弹、铃声不响）。
+     * 走 setAlarmClock 让系统以「闹钟」的身份回调我们，触发时应用获得临时前台
+     * 豁免，锁屏 / 熄屏都能把铃声和界面拉起来。
+     */
+    public static void fireSoon(Context ctx, Todo t, String mode) {
+        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        int rc = (int) (t.id % 100000) + 5000;
+        Intent i = new Intent(ctx, AlarmReceiver.class)
+                .putExtra(EXTRA_ID, t.id)
+                .putExtra(EXTRA_MODE, mode);
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, rc, i,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        long at = System.currentTimeMillis() + 2000L;
+        try {
+            Intent show = new Intent(ctx, com.jibuzhu.app.RingActivity.class)
+                    .putExtra(EXTRA_ID, t.id)
+                    .putExtra(EXTRA_MODE, mode);
+            PendingIntent showPi = PendingIntent.getActivity(ctx, rc + 1000, show,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            am.setAlarmClock(new AlarmManager.AlarmClockInfo(at, showPi), pi);
+        } catch (Exception e) {
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+            } catch (Exception e2) {
+                am.set(AlarmManager.RTC_WAKEUP, at, pi);
+            }
+        }
+    }
+
     public static void rescheduleAll(Context ctx) {
         List<Todo> list = Store.get(ctx).todos();
         for (Todo t : list) schedule(ctx, t);

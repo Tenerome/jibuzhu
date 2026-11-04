@@ -358,16 +358,30 @@ public final class SettingsPanel {
 
     // ---------- 开源声明 ----------
 
-    private static void fillOss(Activity a, LinearLayout body) {
+    private static void fillOss(final Activity a, LinearLayout body) {
         body.removeAllViews();
         TextView t = Ui.text(a,
-                "这里以后放项目地址和第三方库的许可声明。\n\n"
-                        + "· 腾讯位置服务（地图搜索 / 逆地址解析 / 静态图）\n"
-                        + "· AndroidX 未使用\n",
+                "· 腾讯位置服务（地图搜索 / 逆地址解析 / 静态图）\n"
+                        + "· WeLink 打卡页跳转（快捷方式 Intent）\n",
                 13, Theme.sub(a));
         t.setLineSpacing(Theme.dp(a, 3), 1f);
-        t.setPadding(Theme.dp(a, 14), Theme.dp(a, 8), Theme.dp(a, 14), Theme.dp(a, 8));
+        t.setPadding(Theme.dp(a, 14), Theme.dp(a, 8), Theme.dp(a, 14), Theme.dp(a, 4));
         body.addView(t);
+
+        final String repo = "https://github.com/Tenerome/jibuzhu";
+        TextView link = Ui.text(a, repo, 13, Theme.accent(a));
+        link.setPadding(Theme.dp(a, 14), Theme.dp(a, 4), Theme.dp(a, 14), Theme.dp(a, 10));
+        link.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(repo)));
+                } catch (Exception e) {
+                    Toast.makeText(a, repo, Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+        body.addView(link);
     }
 
     static void toast(Activity a, String s) {
