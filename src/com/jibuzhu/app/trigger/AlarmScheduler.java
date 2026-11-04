@@ -28,9 +28,32 @@ public class AlarmScheduler {
         if (!t.isLocation() && !t.isCheckin() && !t.winStart.isEmpty()) {
             setAt(ctx, am, t.id, "main", nextAt(t.winStart));
         }
+        // 定位型/打卡型：在时间段开始那一刻把定位服务叫醒。
+        // 只靠服务内部的定时不行 —— 锁屏进 doze 后 Handler 会被冻住，
+        // 时段到了没人重新评估，锁屏时状态栏就一直不出现定位标志。
+        if ((t.isLocation() || t.isCheckin()) && !t.winStart.isEmpty()) {
+            setSilent(ctx, am, t.id, "geoStart", nextAt(t.winStart));
+        }
         // 兜底：到点还没触发就提醒（三种类型都支持）
         if (!t.fallback.isEmpty()) {
             setAt(ctx, am, t.id, "fallback", nextAt(t.fallback));
+        }
+    }
+
+    /** 不弹界面、只负责到点唤醒应用的精确闹钟（doze 下也会唤醒 CPU） */
+    static void setSilent(Context ctx, AlarmManager am, long id, String mode, long at) {
+        Intent i = new Intent(ctx, AlarmReceiver.class)
+                .putExtra(EXTRA_ID, id)
+                .putExtra(EXTRA_MODE, mode);
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, reqCode(id, mode), i,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        try {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+        } catch (Exception e) {
+            try {
+                am.set(AlarmManager.RTC_WAKEUP, at, pi);
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -73,7 +96,7 @@ public class AlarmScheduler {
 
     public static void cancel(Context ctx, long id) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-        for (String mode : new String[]{"main", "fallback"}) {
+        for (String mode : new String[]{"main", "fallback", "geoStart"}) {
             Intent i = new Intent(ctx, AlarmReceiver.class)
                     .putExtra(EXTRA_ID, id)
                     .putExtra(EXTRA_MODE, mode);
@@ -84,7 +107,10 @@ public class AlarmScheduler {
     }
 
     static int reqCode(long id, String mode) {
-        return (int) (id * 10 + ("fallback".equals(mode) ? 1 : 0));
+        int tail = 0;                       // main
+        if ("fallback".equals(mode)) tail = 1;
+        else if ("geoStart".equals(mode)) tail = 2;
+        return (int) (id * 10 + tail);
     }
 
     /**

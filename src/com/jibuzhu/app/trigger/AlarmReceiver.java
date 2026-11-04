@@ -28,6 +28,20 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (mode == null) mode = "main";
         if (id <= 0) return;
 
+        // 定位待办的时间段开始了：把定位服务唤起来，让它立刻开始定位。
+        // 不能只靠服务自己的定时 —— 锁屏进 doze 之后 Handler 的定时会被冻住，
+        // 时段到了没人重新评估，表现就是锁屏时状态栏一直没有定位标志。
+        if ("geoStart".equals(mode)) {
+            try {
+                ctx.startForegroundService(new Intent(ctx, GeoService.class));
+            } catch (Exception e) {
+                android.util.Log.e("JBZ-GEO", "geoStart start fail: " + e);
+            }
+            Todo g = Store.get(ctx).todo(id);
+            if (g != null) AlarmScheduler.schedule(ctx, g);   // 顺手排下一轮
+            return;
+        }
+
         Todo t = Store.get(ctx).todo(id);
         if (t == null || !t.enabled) return;
 

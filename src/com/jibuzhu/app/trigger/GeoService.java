@@ -69,7 +69,12 @@ public class GeoService extends Service implements LocationListener {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForegroundCompat();
+        android.util.Log.d("JBZ-GEO", "onStartCommand");
+        try {
+            startForegroundCompat();
+        } catch (Exception e) {
+            android.util.Log.e("JBZ-GEO", "startForeground fail: " + e);
+        }
         scheduleTick(0);
         return START_STICKY;
     }

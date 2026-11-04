@@ -443,6 +443,15 @@ public class TodoEditActivity extends Activity {
         t.id = nid;
         AlarmScheduler.cancel(this, nid);
         AlarmScheduler.schedule(this, t);
+        // 保存完就把定位服务拉起来，不依赖回到主界面时那一次判断
+        // （用户可能存完直接锁屏，主界面的 onResume 根本没机会跑）
+        if (t.enabled && (t.isLocation() || t.isCheckin())) {
+            try {
+                startForegroundService(new Intent(this, com.jibuzhu.app.trigger.GeoService.class));
+            } catch (Exception e) {
+                android.util.Log.e("JBZ-GEO", "save start geo fail: " + e);
+            }
+        }
         if (t.isCheckin()) {
             String tail = t.fallback.isEmpty() ? "" : ("，兜底 " + t.fallback);
             Toast.makeText(this, "到「" + t.place + "」自动打卡" + tail, Toast.LENGTH_SHORT).show();

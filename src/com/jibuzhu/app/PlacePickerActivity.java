@@ -248,6 +248,14 @@ public class PlacePickerActivity extends Activity {
         }
         status.setText("搜索中…");
         resultBox.removeAllViews();
+        // 2 秒还没回来就提示一句信号弱，免得用户以为卡死了
+        final Runnable slow = new Runnable() {
+            @Override
+            public void run() {
+                status.setText("当前GPS信号较弱~");
+            }
+        };
+        status.postDelayed(slow, 2000);
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -256,6 +264,7 @@ public class PlacePickerActivity extends Activity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+                            status.removeCallbacks(slow);
                             showResults(list);
                         }
                     });
@@ -263,6 +272,7 @@ public class PlacePickerActivity extends Activity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+                            status.removeCallbacks(slow);
                             status.setText("搜索失败：" + e.getMessage());
                         }
                     });

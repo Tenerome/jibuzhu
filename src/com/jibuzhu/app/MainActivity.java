@@ -182,10 +182,12 @@ public class MainActivity extends Activity {
                 need = true;
                 break;
             }
+            android.util.Log.d("JBZ-GEO", "syncGeo need=" + need);
             if (need) startForegroundService(new Intent(this, GeoService.class));
             else stopService(new Intent(this, GeoService.class));
 
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            android.util.Log.e("JBZ-GEO", "syncGeo fail: " + e);
         }
         warmLoc();
     }
