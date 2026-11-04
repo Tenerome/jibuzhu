@@ -349,8 +349,11 @@ public class PlacePickerActivity extends Activity {
     }
 
     private void useHere() {
-        // 点过「用当前位置」时先要一次新鲜定位：last known 可能是几小时前在别处的点，
-        // 拿它建围栏会让用户到了地方永远不触发。
+        // 进页面时 warmLoc() 已经在取位置了，拿到了就直接用，别再让用户等一轮
+        if (hereLat != 0 && hereLng != 0) {
+            doUseHere();
+            return;
+        }
         status.setText("正在定位…");
         pickWithFreshLocation(new Runnable() {
             @Override
@@ -391,6 +394,17 @@ public class PlacePickerActivity extends Activity {
      */
     private void pickWithFreshLocation(final Runnable then) {
         final LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        // 快路径：手上已经有一份不太旧、精度还行的位置就直接用。
+        // 系统 GPS 冷启动要搜星，等它十几秒对「选个地点」这件事完全不划算。
+        Location quick = bestLastKnown(lm);
+        if (quick != null && accOf(quick) <= 200f
+                && System.currentTimeMillis() - quick.getTime() < 10 * 60 * 1000L) {
+            hereLat = quick.getLatitude();
+            hereLng = quick.getLongitude();
+            hereAcc = accOf(quick);
+            runOnUiThread(then);
+            return;
+        }
         final boolean[] done = new boolean[]{false};
         final Location[] best = new Location[]{null};
 
@@ -401,7 +415,7 @@ public class PlacePickerActivity extends Activity {
                 if (loc == null || done[0]) return;
                 if (best[0] == null || accOf(loc) < accOf(best[0])) best[0] = loc;
                 status.setText("定位中… ±" + ((int) accOf(best[0])) + " m");
-                if (accOf(best[0]) <= 30f) finish[0].run();
+                if (accOf(best[0]) <= 120f) finish[0].run();
             }
 
             @Override
@@ -447,8 +461,8 @@ public class PlacePickerActivity extends Activity {
             }
         } catch (Exception ignored) {
         }
-        // 12 秒还没等到足够准的点，就用这期间最好的（或 last known）
-        new android.os.Handler(getMainLooper()).postDelayed(finish[0], 12000);
+        // 3.5 秒还没等到足够准的点，就用这期间最好的（或 last known）
+        new android.os.Handler(getMainLooper()).postDelayed(finish[0], 3500);
     }
 
     private void doUseHere() {
