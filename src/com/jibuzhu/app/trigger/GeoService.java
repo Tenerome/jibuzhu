@@ -50,6 +50,8 @@ public class GeoService extends Service implements LocationListener {
     private Location last;
     /** 当前生效的请求间隔；-1 表示没在请求 */
     private long interval = -1;
+    /** 最近一次定位到最近目标待办的距离（米） */
+    private double lastBest = Double.MAX_VALUE;
     private Runnable tick;
 
     @Override
@@ -142,14 +144,18 @@ public class GeoService extends Service implements LocationListener {
         return out;
     }
 
-    /** 距离越近，要得越勤 */
+    /** 距离越近，要得越勤；最近的那个距离顺手记下来（决定用 GPS 还是网络定位） */
     private long intervalFor(List<Todo> list) {
-        if (last == null) return 60_000L;
+        if (last == null) {
+            lastBest = Double.MAX_VALUE;
+            return 60_000L;
+        }
         double min = Double.MAX_VALUE;
         for (Todo t : list) {
             double d = Util.distance(last.getLatitude(), last.getLongitude(), t.lat, t.lng);
             if (d < min) min = d;
         }
+        lastBest = min;
         if (min > 10_000) return 300_000L;
         if (min > 5_000) return 60_000L;
         if (min > 3_000) return 30_000L;
@@ -161,16 +167,34 @@ public class GeoService extends Service implements LocationListener {
             if (lm == null) return;
             if (interval > 0) lm.removeUpdates(this);
             interval = -1;
-            String provider = LocationManager.NETWORK_PROVIDER;
-            if (!lm.isProviderEnabled(provider)) {
-                provider = LocationManager.GPS_PROVIDER;
-                if (!lm.isProviderEnabled(provider)) return;
+            boolean any = false;
+            // 近处用 GPS 精确定位（网络定位实测精度 500 米上下，拿它判 300 米围栏
+            // 永远命中不了，而且偏差大时算出的距离能差出几公里）。
+            if (useGps() && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, iv, 30f, this, ui.getLooper());
+                any = true;
             }
-            lm.requestLocationUpdates(provider, iv, MIN_MOVE, this, ui.getLooper());
-            interval = iv;
+            // 网络定位始终挂一份兜底：室内 GPS 没信号时至少还有位置更新
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+                        Math.max(iv, 300_000L), 200f, this, ui.getLooper());
+                any = true;
+            }
+            if (any) interval = iv;
         } catch (SecurityException e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * 要不要开 GPS。
+     * 判断时把上一次定位的误差扣掉 —— 网络定位说「还有 6 公里」，但它自己就标着
+     * 500 米甚至更大的误差，很可能人已经在楼下了。
+     */
+    private boolean useGps() {
+        if (last == null) return true;   // 头一次先把位置定准
+        float acc = last.hasAccuracy() ? last.getAccuracy() : 500f;
+        return (lastBest - acc) <= 10_000;
     }
 
     private void stopUpdates() {
@@ -186,9 +210,15 @@ public class GeoService extends Service implements LocationListener {
         if (loc == null) return;
         last = loc;
         List<Todo> list = activeLocations();
+        float acc = loc.hasAccuracy() ? loc.getAccuracy() : 100f;
         for (Todo t : list) {
             double d = Util.distance(loc.getLatitude(), loc.getLongitude(), t.lat, t.lng);
-            if (d <= Math.max(50, t.radius)) {
+            // 定位本身有误差（网络定位常在数百米），判定半径按误差放宽一点，
+            // 否则精度差的时候围栏永远命中不了。
+            double tol = Math.max(50, t.radius) + Math.min(acc, 150f);
+            android.util.Log.d("JBZ-GEO", "todo=" + t.id + " d=" + ((int) d) + " acc=" + ((int) acc)
+                    + " tol=" + ((int) tol) + " checkin=" + t.isCheckin());
+            if (d <= tol) {
                 t.lastFired = Util.today();
                 Store.get(this).saveTodo(t);
                 if (t.isCheckin()) {

@@ -296,6 +296,77 @@ public class PlacePickerActivity extends Activity {
     }
 
     private void useHere() {
+        // 点过「用当前位置」时先要一次新鲜定位：last known 可能是几小时前在别处的点，
+        // 拿它建围栏会让用户到了地方永远不触发。
+        status.setText("正在定位…");
+        pickWithFreshLocation(new Runnable() {
+            @Override
+            public void run() {
+                doUseHere();
+            }
+        });
+    }
+
+    /** 要一次新鲜定位（最多等 6 秒），拿到就回调；拿不到就用 last known 兜底 */
+    private void pickWithFreshLocation(final Runnable then) {
+        final LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        final boolean[] done = new boolean[]{false};
+        final Runnable[] fire = new Runnable[1];
+        fire[0] = new Runnable() {
+            @Override
+            public void run() {
+                if (done[0]) return;
+                done[0] = true;
+                runOnUiThread(then);
+            }
+        };
+        try {
+            if (lm != null && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    lm.getCurrentLocation(LocationManager.GPS_PROVIDER, null, getMainExecutor(),
+                            new java.util.function.Consumer<Location>() {
+                                @Override
+                                public void accept(Location loc) {
+                                    if (loc != null) {
+                                        hereLat = loc.getLatitude();
+                                        hereLng = loc.getLongitude();
+                                    }
+                                    fire[0].run();
+                                }
+                            });
+                } else {
+                    lm.requestSingleUpdate(LocationManager.GPS_PROVIDER,
+                            new android.location.LocationListener() {
+                                @Override
+                                public void onLocationChanged(Location loc) {
+                                    if (loc != null) {
+                                        hereLat = loc.getLatitude();
+                                        hereLng = loc.getLongitude();
+                                    }
+                                    fire[0].run();
+                                }
+
+                                @Override
+                                public void onStatusChanged(String p, int s, Bundle b) {
+                                }
+
+                                @Override
+                                public void onProviderEnabled(String p) {
+                                }
+
+                                @Override
+                                public void onProviderDisabled(String p) {
+                                }
+                            }, getMainLooper());
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // 6 秒还没等到定位结果，就用 last known 走
+        new android.os.Handler(getMainLooper()).postDelayed(fire[0], 6000);
+    }
+
+    private void doUseHere() {
         if (hereLat == 0 && hereLng == 0) {
             Toast.makeText(this, "还拿不到当前位置，先等一下或到室外再试", Toast.LENGTH_LONG).show();
             return;
