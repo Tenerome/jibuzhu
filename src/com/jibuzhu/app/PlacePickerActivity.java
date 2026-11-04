@@ -139,7 +139,7 @@ public class PlacePickerActivity extends Activity {
         });
         root.addView(searchRow);
 
-        status = Ui.text(this, "输入关键词搜索，或直接用「当前位置」", 13, Theme.sub(this));
+        status = Ui.text(this, "先搜关键词选点最准；「当前位置」靠手机定位，室内会偏几百米", 13, Theme.sub(this));
         status.setPadding(Theme.dp(this, 16), Theme.dp(this, 10), Theme.dp(this, 16), Theme.dp(this, 4));
         root.addView(status);
 
@@ -307,63 +307,95 @@ public class PlacePickerActivity extends Activity {
         });
     }
 
-    /** 要一次新鲜定位（最多等 6 秒），拿到就回调；拿不到就用 last known 兜底 */
+    /** 当前取到的坐标精度（米），选点时给用户看 */
+    private float hereAcc = 999f;
+
+    private static float accOf(Location l) {
+        if (l == null) return 999f;
+        return l.hasAccuracy() ? l.getAccuracy() : 999f;
+    }
+
+    /** 拿 last known 里最新的一个当兜底 */
+    private static Location bestLastKnown(LocationManager lm) {
+        Location best = null;
+        for (String p : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER}) {
+            try {
+                if (!lm.isProviderEnabled(p)) continue;
+                Location l = lm.getLastKnownLocation(p);
+                if (l == null) continue;
+                if (best == null || l.getTime() > best.getTime()) best = l;
+            } catch (Exception ignored) {
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 要一次尽量准的定位。
+     * GPS 和网络同时挂，谁报上来的精度好用谁；一旦精度到 30 米内立刻采用，
+     * 否则最多等 12 秒，取这段时间里最优的那个点。
+     */
     private void pickWithFreshLocation(final Runnable then) {
         final LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
         final boolean[] done = new boolean[]{false};
-        final Runnable[] fire = new Runnable[1];
-        fire[0] = new Runnable() {
+        final Location[] best = new Location[]{null};
+
+        final Runnable[] finish = new Runnable[1];
+        final android.location.LocationListener lis = new android.location.LocationListener() {
+            @Override
+            public void onLocationChanged(Location loc) {
+                if (loc == null || done[0]) return;
+                if (best[0] == null || accOf(loc) < accOf(best[0])) best[0] = loc;
+                status.setText("定位中… ±" + ((int) accOf(best[0])) + " m");
+                if (accOf(best[0]) <= 30f) finish[0].run();
+            }
+
+            @Override
+            public void onStatusChanged(String p, int s, Bundle b) {
+            }
+
+            @Override
+            public void onProviderEnabled(String p) {
+            }
+
+            @Override
+            public void onProviderDisabled(String p) {
+            }
+        };
+
+        finish[0] = new Runnable() {
             @Override
             public void run() {
                 if (done[0]) return;
                 done[0] = true;
+                try {
+                    lm.removeUpdates(lis);
+                } catch (Exception ignored) {
+                }
+                Location b = best[0];
+                if (b == null) b = bestLastKnown(lm);
+                if (b != null) {
+                    hereLat = b.getLatitude();
+                    hereLng = b.getLongitude();
+                    hereAcc = accOf(b);
+                }
                 runOnUiThread(then);
             }
         };
+
         try {
-            if (lm != null && lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                if (android.os.Build.VERSION.SDK_INT >= 30) {
-                    lm.getCurrentLocation(LocationManager.GPS_PROVIDER, null, getMainExecutor(),
-                            new java.util.function.Consumer<Location>() {
-                                @Override
-                                public void accept(Location loc) {
-                                    if (loc != null) {
-                                        hereLat = loc.getLatitude();
-                                        hereLng = loc.getLongitude();
-                                    }
-                                    fire[0].run();
-                                }
-                            });
-                } else {
-                    lm.requestSingleUpdate(LocationManager.GPS_PROVIDER,
-                            new android.location.LocationListener() {
-                                @Override
-                                public void onLocationChanged(Location loc) {
-                                    if (loc != null) {
-                                        hereLat = loc.getLatitude();
-                                        hereLng = loc.getLongitude();
-                                    }
-                                    fire[0].run();
-                                }
-
-                                @Override
-                                public void onStatusChanged(String p, int s, Bundle b) {
-                                }
-
-                                @Override
-                                public void onProviderEnabled(String p) {
-                                }
-
-                                @Override
-                                public void onProviderDisabled(String p) {
-                                }
-                            }, getMainLooper());
+            if (lm != null) {
+                for (String p : new String[]{LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER}) {
+                    if (lm.isProviderEnabled(p)) {
+                        lm.requestLocationUpdates(p, 1000L, 0f, lis, getMainLooper());
+                    }
                 }
             }
         } catch (Exception ignored) {
         }
-        // 6 秒还没等到定位结果，就用 last known 走
-        new android.os.Handler(getMainLooper()).postDelayed(fire[0], 6000);
+        // 12 秒还没等到足够准的点，就用这期间最好的（或 last known）
+        new android.os.Handler(getMainLooper()).postDelayed(finish[0], 12000);
     }
 
     private void doUseHere() {
@@ -371,7 +403,11 @@ public class PlacePickerActivity extends Activity {
             Toast.makeText(this, "还拿不到当前位置，先等一下或到室外再试", Toast.LENGTH_LONG).show();
             return;
         }
-        status.setText("正在识别位置…");
+        if (hereAcc > 100f) {
+            Toast.makeText(this, "定位精度一般（±" + ((int) hereAcc) + " 米），到室外开阔处再取会更准",
+                    Toast.LENGTH_LONG).show();
+        }
+        status.setText("正在识别位置…（±" + ((int) hereAcc) + " 米）");
         final double lat = hereLat, lng = hereLng;
         new Thread(new Runnable() {
             @Override
