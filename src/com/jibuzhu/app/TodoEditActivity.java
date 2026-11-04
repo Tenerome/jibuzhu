@@ -436,6 +436,9 @@ public class TodoEditActivity extends Activity {
             if (t.radius <= 0) t.radius = 300;
         }
         t.ring = ring;
+        // 改过内容就当成一条新的：清掉"今天已经响过"的标记，
+        // 否则改完地点当天不会再提醒（这是最容易让人以为"没生效"的地方）
+        t.lastFired = "";
         long nid = Store.get(this).saveTodo(t);
         t.id = nid;
         AlarmScheduler.cancel(this, nid);

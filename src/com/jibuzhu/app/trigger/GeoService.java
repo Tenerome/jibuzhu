@@ -57,6 +57,9 @@ public class GeoService extends Service implements LocationListener {
     /** 最近一次定位结果，列表里显示距离要用，和判定共用同一次刷新 */
     public static volatile Location lastLoc;
 
+    /** 刚唤起过提醒的待办，避免短时间内重复弹出（不落库，重启即清空） */
+    private final java.util.Map<Long, Long> triedAt = new java.util.HashMap<Long, Long>();
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -136,14 +139,20 @@ public class GeoService extends Service implements LocationListener {
         String today = Util.today();
         List<Todo> all = Store.get(this).todos();
         for (Todo t : all) {
-            if (!t.enabled) continue;
-            // 打卡型也是靠位置触发的，一起纳入
-            if (!t.isLocation() && !t.isCheckin()) continue;
-            if (!Util.dayMatches(t.rep, now)) continue;
-            if (!Util.inWindow(t.winStart, t.winEnd, now)) continue;
-            if (today.equals(t.lastFired)) continue;
+            String why = null;
+            if (!t.enabled) why = "disabled";
+            else if (!t.isLocation() && !t.isCheckin()) why = "not-loc";
+            else if (!Util.dayMatches(t.rep, now)) why = "day";
+            else if (!Util.inWindow(t.winStart, t.winEnd, now)) why = "window "
+                    + t.winStart + "-" + t.winEnd;
+            else if (today.equals(t.lastFired)) why = "fired";
+            if (why != null) {
+                android.util.Log.d("JBZ-GEO", "skip id=" + t.id + " " + why);
+                continue;
+            }
             out.add(t);
         }
+        android.util.Log.d("JBZ-GEO", "active=" + out.size() + " of " + all.size());
         return out;
     }
 
@@ -184,6 +193,8 @@ public class GeoService extends Service implements LocationListener {
                 any = true;
             }
             if (any) interval = iv;
+            android.util.Log.d("JBZ-GEO", "apply iv=" + iv + " gps=" + useGps()
+                    + " best=" + ((int) lastBest));
         } catch (SecurityException e) {
             e.printStackTrace();
         }
@@ -223,8 +234,17 @@ public class GeoService extends Service implements LocationListener {
             android.util.Log.d("JBZ-GEO", "todo=" + t.id + " d=" + ((int) d) + " acc=" + ((int) acc)
                     + " tol=" + ((int) tol) + " checkin=" + t.isCheckin());
             if (d <= tol) {
-                t.lastFired = Util.today();
-                Store.get(this).saveTodo(t);
+                // 不在这里写 lastFired：唤起提醒可能失败（权限/后台限制），
+                // 写了当天就彻底不提醒了。只记一个内存里的"刚试过"，2 分钟内不重复唤起。
+                long nowMs = System.currentTimeMillis();
+                Long tried = triedAt.get(t.id);
+                if (tried != null && nowMs - tried < 120_000L) {
+                    android.util.Log.d("JBZ-GEO", "hit but tried recently id=" + t.id);
+                    continue;
+                }
+                triedAt.put(t.id, nowMs);
+                android.util.Log.d("JBZ-GEO", "HIT id=" + t.id + " d=" + ((int) d)
+                        + " checkin=" + t.isCheckin() + " locked=" + locked());
                 if (t.isCheckin()) {
                     // 打卡：锁屏就走闹钟式提醒（点「去打卡」后跳 WeLink）；
                     // 没锁屏直接跳过去，不响铃。
