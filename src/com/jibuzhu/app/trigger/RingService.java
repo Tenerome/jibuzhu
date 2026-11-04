@@ -81,7 +81,7 @@ public class RingService extends Service {
             kickId = id;
             kickTries = 0;
             ui.removeCallbacks(kick);
-            ui.postDelayed(kick, 4000);
+            ui.postDelayed(kick, 800);
         }
         return START_NOT_STICKY;
     }

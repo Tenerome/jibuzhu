@@ -64,8 +64,13 @@ public class AlarmReceiver extends BroadcastReceiver {
                 .putExtra("todo_id", t.id)
                 .putExtra("mode", mode)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        // 2) 界面交给 RingService：它先尝试悬浮窗（能压在锁屏之上），不行再拉起全屏页。
-        //    这里不再直接 startActivity —— 锁屏时会被 ROM 的锁屏几秒后盖回去，看着像"没弹出来"。
+        // 有「显示在其他应用上层」权限时，后台直接 startActivity 是被系统允许的，
+        // 而且比等系统走全屏通知（Android 14+ 默认拦截，要用户手动开）快得多。
+        // 先试一把，不行还有 notifications 和 RingService 的重试兜底。
+        try {
+            ctx.startActivity(ri);
+        } catch (Exception ignored) {
+        }
 
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
         NotificationChannel ch = new NotificationChannel(CHANNEL, "待办提醒", NotificationManager.IMPORTANCE_HIGH);

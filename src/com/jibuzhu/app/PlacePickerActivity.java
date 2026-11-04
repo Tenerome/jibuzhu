@@ -45,6 +45,49 @@ public class PlacePickerActivity extends Activity {
         super.onCreate(b);
         buildUi();
         tagHere();
+        warmLoc();
+    }
+
+    /**
+     * 进页面就先把位置预热出来。
+     * 搜索接口没坐标时只能按「全国」搜，慢得明显；有坐标就是附近 50 公里，快很多。
+     * 这里先用 last known 顶上（同步、极快），再在后台补一次新定位。
+     */
+    private void warmLoc() {
+        try {
+            final LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+            if (lm == null) return;
+            Location known = bestLastKnown(lm);
+            if (known != null) {
+                hereLat = known.getLatitude();
+                hereLng = known.getLongitude();
+                hereAcc = accOf(known);
+            }
+            if (!lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) return;
+            lm.requestSingleUpdate(LocationManager.GPS_PROVIDER, new android.location.LocationListener() {
+                @Override
+                public void onLocationChanged(Location loc) {
+                    if (loc != null) {
+                        hereLat = loc.getLatitude();
+                        hereLng = loc.getLongitude();
+                        hereAcc = accOf(loc);
+                    }
+                }
+
+                @Override
+                public void onStatusChanged(String p, int s, Bundle bundle) {
+                }
+
+                @Override
+                public void onProviderEnabled(String p) {
+                }
+
+                @Override
+                public void onProviderDisabled(String p) {
+                }
+            }, getMainLooper());
+        } catch (Exception ignored) {
+        }
     }
 
     private void tagHere() {

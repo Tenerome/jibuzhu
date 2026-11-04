@@ -129,7 +129,9 @@ public class GeoService extends Service implements LocationListener {
             return;
         }
         long want = intervalFor(active);
-        if (want != interval) apply(want);
+        // 间隔稍微变一点就重设，会让 GPS 反复重新搜星，反而更慢。
+        // 只有明显变化（超出 ±25%）才重设。
+        if (interval < 0 || want < interval * 0.75 || want > interval * 1.25) apply(want);
     }
 
     /** 当前真正需要关注的定位待办（启用 / 今天该响 / 在时间段内 / 今天还没响过） */
@@ -186,10 +188,12 @@ public class GeoService extends Service implements LocationListener {
                 lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, iv, 30f, this, ui.getLooper());
                 any = true;
             }
-            // 网络定位始终挂一份兜底：室内 GPS 没信号时至少还有位置更新
+            // 网络定位始终挂一份兜底：室内 GPS 没信号时至少还有位置更新。
+            // 注意不能写死 5 分钟 —— 10 公里外本来就没开 GPS，全靠网络定位，
+            // 那样就变成 5 分钟才动一次了。
             if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                        Math.max(iv, 300_000L), 200f, this, ui.getLooper());
+                        useGps() ? Math.max(iv, 60_000L) : iv, 200f, this, ui.getLooper());
                 any = true;
             }
             if (any) interval = iv;
@@ -208,7 +212,9 @@ public class GeoService extends Service implements LocationListener {
     private boolean useGps() {
         if (last == null) return true;   // 头一次先把位置定准
         float acc = last.hasAccuracy() ? last.getAccuracy() : 500f;
-        return (lastBest - acc) <= 5_000;   // 5 公里内用 GPS
+        // 10 公里内就开 GPS：贴近时才开的话，GPS 冷启动要十几秒，
+        // 这段时间判定是空白的，表现出来就是"到了地方要愣一会儿才提醒"。
+        return (lastBest - acc) <= 10_000;
     }
 
     private void stopUpdates() {

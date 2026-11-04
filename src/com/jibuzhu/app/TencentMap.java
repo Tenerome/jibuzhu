@@ -106,8 +106,8 @@ public class TencentMap {
 
     private static byte[] getBytes(String url) throws Exception {
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setConnectTimeout(8000);
-        conn.setReadTimeout(8000);
+        conn.setConnectTimeout(6000);
+        conn.setReadTimeout(6000);
         conn.setRequestMethod("GET");
         conn.setRequestProperty("User-Agent", "jibuzhu-app");
         try {
