@@ -1,45 +1,51 @@
 # 记不住
 
-一个只干两件事的安卓 App：**待办提醒**（按时间或定位，到点全屏弹出 + 响铃）和**长期计划**（目标拆阶段）。
+一个安卓待办提醒 App。纯 Java 手写 UI（除 `AndroidManifest.xml` 外没有任何布局 XML），无第三方依赖。
 
-已装在本机，桌面图标名「记不住」，包名 `com.jibuzhu.app`。
+## 功能
 
-## 怎么用
+- **时间提醒**：像闹钟一样按时刻提醒，重复周期为单次 / 每天
+- **地点提醒**：到达腾讯地图选定的地点（含半径、时间段限制）时提醒
+- **打卡**：连上或断开指定 WiFi 时打开 WeLink 打卡页（锁屏时先弹提醒页）
+- **计划**：分阶段目标，按流程图形式串联
+- 深色 / 浅色主题、本地 mp3 铃声、桌面组件、回收站
 
-### 新建待办
+## 构建
 
-1. 打开 App → 底部「+ 新建」
-2. 填标题
-3. 选提醒条件：
-   - **时间**：到「时间窗口」的开始时间提醒。
-   - **定位**：进入地点半径（默认 300 米）且在当前时间窗口内才提醒。点「用当前位置作为地点」可以直接把当前坐标填进去，再改个名字（比如「南京南站地铁站」）。
-4. **兜底时间**：定位型必填。到点还没到地方，也会提醒一次（例：8:50 还没到公司就提醒打卡）。
-5. **周期**：单次 / 每天 / 双休（周一至周五）/ 单休（周一至周六）/ 周末。
-6. 保存。
+```bash
+cd app && sh build.sh
+# 产物：app/build/app-signed.apk
+```
 
-到点后会：全屏弹出提醒页（锁屏也会亮屏弹出）+ 循环播放系统闹钟铃声（静音/震动下也响），点「我已完成」或「稍后 5 分钟」停止。
+依赖 termux 提供的 `aapt2` / `javac` / `d8` / `apksigner`，签名用 `app/build/ksig`（不纳入版本库）。
 
-### 查看 / 修改 / 删除
+## 安装
 
-列表页每条待办下面有「编辑」「删除」。编辑里可以改时间、地点、周期、兜底，保存后闹钟自动重排。
+```bash
+cp app/build/app-signed.apk /sdcard/jbz.apk
+# 再以 shell 身份（uid 2000）执行：
+cp /sdcard/jbz.apk /data/local/tmp/ && pm install -r -d /data/local/tmp/jbz.apk
+```
 
-### 计划
+屏幕熄灭时安装会报 `INSTALL_FAILED_ABORTED: User rejected permissions`，先点亮解锁。
 
-切到「计划」tab → 「+ 新建」：
-- 计划名、最终目标、截止日期
-- 「+ 加一个阶段」可以加多段（每段填名称、开始日期、结束日期）
-- 保存后在列表里能勾选阶段完成
+## 结构
 
-例：计划「换租房子」，目标「1月1号前搬到新房子」，截止 2027-01-01，阶段：11/1–12/15 周末看房、12/16–12/31 确定并签合同、12/28–12/31 搬家。
+```
+app/
+├── AndroidManifest.xml
+├── build.sh                 # aapt2 → javac → d8 → zipalign → apksigner
+├── src/com/jibuzhu/app/
+│   ├── MainActivity.java    # 待办/计划列表、设置抽屉
+│   ├── TodoEditActivity.java / PlanEditActivity.java / PlacePickerActivity.java
+│   ├── RingActivity.java / RingUi.java / RingOverlay.java   # 提醒页
+│   ├── TodoWidget.java / WidgetService.java                  # 桌面组件
+│   ├── SettingsPanel.java / TrashActivity.java
+│   ├── Theme.java / Ui.java / SwipeRow.java / TimeSpinner.java
+│   ├── Checkin.java / TencentMap.java / Util.java
+│   ├── data/                # Store（SQLite）、Todo、Plan、Stage
+│   └── trigger/             # AlarmScheduler、AlarmReceiver、RingService、GeoService、WifiWatchService
+└── res/
+```
 
-## 权限说明（重要）
-
-- **通知**、**定位**：首次打开会弹窗，必须允许。
-- **允许后台运行 / 电池不优化**：如果发现到点不弹，去 设置 → 应用管理 → 记不住 → 省电策略 → 允许后台高耗电。
-- **显示在其他应用上层**：用于让提醒页能从后台弹出来，已通过系统授权打开。
-
-## 注意事项
-
-- 时间型待办的闹钟走 `AlarmManager.setAlarmClock`，会占用系统的「下一个闹钟」显示位（状态栏会显示闹钟图标），这是为了让系统允许从后台弹全屏页。
-- 删除待办后，系统里已登记的那条闹钟会被取消；但要清掉状态栏的闹钟图标，需要打开一次系统时钟确认。
-- 定位提醒靠系统定位回调（30 秒一次），人一直不动时也能靠「最后已知位置」判一次。
+数据库为 `jibuzhu.db`，`Store.java` 里用 `VER` 管版本，升级走 `onUpgrade`、回退走 `onDowngrade`（保留数据）。
