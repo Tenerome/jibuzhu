@@ -171,20 +171,70 @@ public class MainActivity extends Activity {
     private void syncGeo() {
         try {
             boolean need = false;
-            Calendar now = Calendar.getInstance();
-            String today = Util.today();
             for (Todo t : Store.get(this).todos()) {
                 if (!t.enabled) continue;
                 // 定位型和打卡型都靠定位服务触发
                 if (!t.isLocation() && !t.isCheckin()) continue;
-                if (!Util.dayMatches(t.rep, now)) continue;
-                if (!Util.inWindow(t.winStart, t.winEnd, now)) continue;
-                if (today.equals(t.lastFired)) continue;
+                // 这里不能再要求「必须在时间段内、今天还没响过」。
+                // 时间段是稍后才到的，而 syncGeo 只在打开 App 时跑一次 ——
+                // 加上那些条件就等于时段外不启动服务，到点了没人去打开定位
+                // （症状：锁屏时状态栏一直没有定位标志，解锁瞬间才出现）。
                 need = true;
+                break;
             }
             if (need) startForegroundService(new Intent(this, GeoService.class));
             else stopService(new Intent(this, GeoService.class));
 
+        } catch (Exception ignored) {
+        }
+        warmLoc();
+    }
+
+    /** 打开 App 就顺手把位置定一下：列表距离立刻能显示，去搜地点也更快 */
+    private void warmLoc() {
+        try {
+            if (GeoService.lastLoc != null) return;   // 服务已经给了位置
+            final android.location.LocationManager lm =
+                    (android.location.LocationManager) getSystemService(LOCATION_SERVICE);
+            if (lm == null) return;
+            android.location.Location best = null;
+            for (String p : new String[]{android.location.LocationManager.GPS_PROVIDER,
+                    android.location.LocationManager.NETWORK_PROVIDER}) {
+                try {
+                    if (!lm.isProviderEnabled(p)) continue;
+                    android.location.Location l = lm.getLastKnownLocation(p);
+                    if (l == null) continue;
+                    if (best == null || l.getTime() > best.getTime()) best = l;
+                } catch (Exception ignored) {
+                }
+            }
+            if (best != null) GeoService.lastLoc = best;
+            for (String p : new String[]{android.location.LocationManager.NETWORK_PROVIDER,
+                    android.location.LocationManager.GPS_PROVIDER}) {
+                try {
+                    if (!lm.isProviderEnabled(p)) continue;
+                    lm.requestSingleUpdate(p, new android.location.LocationListener() {
+                        @Override
+                        public void onLocationChanged(android.location.Location loc) {
+                            if (loc != null) GeoService.lastLoc = loc;
+                        }
+
+                        @Override
+                        public void onStatusChanged(String s, int i, android.os.Bundle bundle) {
+                        }
+
+                        @Override
+                        public void onProviderEnabled(String s) {
+                        }
+
+                        @Override
+                        public void onProviderDisabled(String s) {
+                        }
+                    }, getMainLooper());
+                    break;
+                } catch (Exception ignored) {
+                }
+            }
         } catch (Exception ignored) {
         }
     }

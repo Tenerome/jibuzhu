@@ -124,14 +124,28 @@ public class GeoService extends Service implements LocationListener {
     private void sync() {
         List<Todo> active = activeLocations();
         if (active.isEmpty()) {
+            // 不能直接 stopSelf —— 待办的时间段还没到的时候服务就该守着了。
+            // 否则「设好待办 → 锁屏 → 到点」这条链上没人把定位打开，
+            // 表现就是锁屏后状态栏一直没有定位标志，解锁那一瞬间才出现。
             stopUpdates();
-            stopSelf();
+            if (!hasAnyLocationTodo()) stopSelf();
             return;
         }
         long want = intervalFor(active);
         // 间隔稍微变一点就重设，会让 GPS 反复重新搜星，反而更慢。
         // 只有明显变化（超出 ±25%）才重设。
         if (interval < 0 || want < interval * 0.75 || want > interval * 1.25) apply(want);
+    }
+
+    /** 还有没有任何「启用的」定位/打卡待办（不管在不在时间段内） */
+    private boolean hasAnyLocationTodo() {
+        try {
+            for (Todo t : Store.get(this).todos()) {
+                if (t.enabled && (t.isLocation() || t.isCheckin())) return true;
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     /** 当前真正需要关注的定位待办（启用 / 今天该响 / 在时间段内 / 今天还没响过） */
