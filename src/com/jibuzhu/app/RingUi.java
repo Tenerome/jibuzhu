@@ -51,7 +51,8 @@ public final class RingUi {
         sub.setGravity(Gravity.CENTER);
         root.addView(sub);
 
-        final boolean checkin = t != null && t.isCheckin();
+        // 兜底时间到了：只提醒，不跳 WeLink
+        final boolean checkin = t != null && t.isCheckin() && !"fallback".equals(mode);
         Button check = Ui.primary(ctx, checkin ? "✓  去打卡" : "✓  完成了，别再响");
         check.setTextSize(19);
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(
@@ -103,7 +104,8 @@ public final class RingUi {
     public static String subText(Todo t, String mode) {
         if (t == null) return "该做这件事了";
         if (t.isCheckin()) {
-            return "该打卡了";
+            if ("fallback".equals(mode)) return "快去打卡哦";
+            return "已到 " + (t.place == null || t.place.isEmpty() ? "打卡地点" : t.place);
         }
         if (t.isLocation()) {
             return "fallback".equals(mode) ? "兜底时间到了，还没到 " + t.place : "已到 " + t.place;

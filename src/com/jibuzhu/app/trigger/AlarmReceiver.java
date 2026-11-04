@@ -38,8 +38,13 @@ public class AlarmReceiver extends BroadcastReceiver {
         }
         if ("once".equals(t.rep) && Util.today().equals(t.lastFired)) return;
 
-        t.lastFired = Util.today();
-        Store.get(ctx).saveTodo(t);
+        // 打卡的兜底只是"催一下"，不能把今天标记成已处理 ——
+        // 否则用户被催完再走到地点，就不会自动打卡了。
+        boolean mark = !(t.isCheckin() && "fallback".equals(mode));
+        if (mark) {
+            t.lastFired = Util.today();
+            Store.get(ctx).saveTodo(t);
+        }
 
         showFullScreen(ctx, t, mode);
         AlarmScheduler.schedule(ctx, t);

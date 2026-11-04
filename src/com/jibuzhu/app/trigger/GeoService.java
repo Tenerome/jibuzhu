@@ -131,7 +131,9 @@ public class GeoService extends Service implements LocationListener {
         String today = Util.today();
         List<Todo> all = Store.get(this).todos();
         for (Todo t : all) {
-            if (!t.enabled || !t.isLocation()) continue;
+            if (!t.enabled) continue;
+            // 打卡型也是靠位置触发的，一起纳入
+            if (!t.isLocation() && !t.isCheckin()) continue;
             if (!Util.dayMatches(t.rep, now)) continue;
             if (!Util.inWindow(t.winStart, t.winEnd, now)) continue;
             if (today.equals(t.lastFired)) continue;
@@ -189,10 +191,30 @@ public class GeoService extends Service implements LocationListener {
             if (d <= Math.max(50, t.radius)) {
                 t.lastFired = Util.today();
                 Store.get(this).saveTodo(t);
-                AlarmReceiver.showFullScreen(this, t, "geo");
+                if (t.isCheckin()) {
+                    // 打卡：锁屏就走闹钟式提醒（点「去打卡」后跳 WeLink）；
+                    // 没锁屏直接跳过去，不响铃。
+                    if (locked()) {
+                        AlarmReceiver.showFullScreen(this, t, "geo");
+                    } else {
+                        Checkin.open(this);
+                    }
+                } else {
+                    AlarmReceiver.showFullScreen(this, t, "geo");
+                }
             }
         }
         sync();
+    }
+
+    private boolean locked() {
+        try {
+            android.app.KeyguardManager km = (android.app.KeyguardManager)
+                    getSystemService(Context.KEYGUARD_SERVICE);
+            return km != null && km.isKeyguardLocked();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

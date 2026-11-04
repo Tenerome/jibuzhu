@@ -33,14 +33,16 @@ public class TodoEditActivity extends Activity {
     private EditText titleEt;
     private TimeSpinner timeSpin;        // 时间提醒的时刻 / 定位提醒的窗口起
     private TimeSpinner winStartSpin, winEndSpin;
-    private LinearLayout chkBox;
+    private LinearLayout chkBox;         // 打卡：兜底时间
     private LinearLayout winBox;
     private TextView winLabel;
-    private EditText wifiEt;
     private TextView placeBtn, ringName;
-    private LinearLayout bodyBox, timeBox, locBox, repeatBox, scheduleBox;
+    private LinearLayout bodyBox, timeBox, locBox, repeatBox, ringBox;
+    private TimeSpinner fallbackSpin;
+    private LinearLayout fallbackRow;
     private int kindIdx;                 // 0 时间 / 1 定位 / 2 打卡
     private int repIdx;                  // 0 单次 / 1 每天
+    private int fbIdx;                   // 0 不设兜底 / 1 设兜底（仅打卡用）
     private String ring = "";
     private MediaPlayer preview;
     private Button tryBtn;
@@ -56,6 +58,7 @@ public class TodoEditActivity extends Activity {
         if (t == null) t = new Todo();
         kindIdx = t.isCheckin() ? 2 : (t.isLocation() ? 1 : 0);
         repIdx = "daily".equals(t.rep) ? 1 : 0;
+        fbIdx = (t.fallback == null || t.fallback.isEmpty()) ? 0 : 1;
         ring = t.ring == null ? "" : t.ring;
         build();
     }
@@ -155,46 +158,45 @@ public class TodoEditActivity extends Activity {
         bodyBox.addView(locBox);
         bodyBox.addView(winBox);
 
-        // ---- 打卡 ----
+        // ---- 打卡：兜底时间（到点还没到地点才响，不跳 WeLink）----
         chkBox = Ui.col(this);
-        chkBox.addView(Ui.label(this, "连上或断开这个 WiFi 自动打开 WeLink 打卡"));
-        wifiEt = Ui.input(this, "WiFi 名称，比如 801");
-        if (t.wifi != null && !t.wifi.isEmpty()) wifiEt.setText(t.wifi);
-        chkBox.addView(wifiEt);
-        Button wifiBtn = Ui.button(this, "获取当前 WiFi");
-        wifiBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                String s = Checkin.currentSsid(TodoEditActivity.this);
-                if (s.isEmpty()) {
-                    Toast.makeText(TodoEditActivity.this,
-                            "现在读不到 WiFi 名称：确认已连上 WiFi、定位开关是打开的",
-                            Toast.LENGTH_LONG).show();
-                } else {
-                    wifiEt.setText(s);
-                }
-            }
-        });
-        chkBox.addView(wifiBtn);
+        chkBox.addView(Ui.label(this, "兜底时间（到点还没到地点，就响铃提醒）"));
+        chkBox.addView(Ui.segmented(this, new String[]{"不设兜底", "设兜底"}, fbIdx,
+                new Ui.OnPick() {
+                    @Override
+                    public void onPick(int index) {
+                        fbIdx = index;
+                        refreshFallback();
+                    }
+                }));
+        fallbackRow = Ui.row(this);
+        String fbCur = (t.fallback == null || t.fallback.isEmpty())
+                ? (!t.winStart.isEmpty() && !"00:00".equals(t.winStart) ? t.winStart : "")
+                : t.fallback;
+        fallbackSpin = new TimeSpinner(this, fbCur);
+        fallbackRow.addView(fallbackSpin);
+        chkBox.addView(fallbackRow);
         bodyBox.addView(chkBox);
 
 
 
-        // ---- 重复与铃声（打卡不需要） ----
-        scheduleBox = Ui.col(this);
-        scheduleBox.addView(Ui.label(this, "重复"));
-        scheduleBox.addView(Ui.segmented(this, new String[]{"单次", "每天"}, repIdx,
+        // ---- 重复（打卡固定每天，不显示这一块） ----
+        repeatBox = Ui.col(this);
+        repeatBox.addView(Ui.label(this, "重复"));
+        repeatBox.addView(Ui.segmented(this, new String[]{"单次", "每天"}, repIdx,
                 new Ui.OnPick() {
                     @Override
                     public void onPick(int index) {
                         repIdx = index;
                     }
                 }));
+        body.addView(repeatBox);
 
         // ---- 铃声 ----
-        scheduleBox.addView(Ui.label(this, "提醒铃声"));
+        ringBox = Ui.col(this);
+        ringBox.addView(Ui.label(this, "提醒铃声"));
         ringName = Ui.text(this, ringText(), 13, Theme.sub(this));
-        scheduleBox.addView(ringName);
+        ringBox.addView(ringName);
         LinearLayout ringOps = Ui.row(this);
         Button pick = Ui.button(this, "选择本地音乐");
         pick.setOnClickListener(new View.OnClickListener() {
@@ -222,7 +224,7 @@ public class TodoEditActivity extends Activity {
         });
         LinearLayout.LayoutParams rl2 = new LinearLayout.LayoutParams(0, Theme.dp(this, 46), 1);
         ringOps.addView(tryBtn, rl2);
-        scheduleBox.addView(ringOps);
+        ringBox.addView(ringOps);
         Button reset = Ui.button(this, "恢复系统闹钟铃声");
         reset.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -232,8 +234,11 @@ public class TodoEditActivity extends Activity {
                 stopPreview();
             }
         });
-        scheduleBox.addView(reset);
-        body.addView(scheduleBox);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 46));
+        rlp.topMargin = Theme.dp(this, 14);
+        ringBox.addView(reset, rlp);
+        body.addView(ringBox);
 
         Button done = Ui.primary(this, "保存");
         LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(
@@ -253,11 +258,18 @@ public class TodoEditActivity extends Activity {
 
     private void rebuild() {
         timeBox.setVisibility(kindIdx == 0 ? View.VISIBLE : View.GONE);
-        locBox.setVisibility(kindIdx == 1 ? View.VISIBLE : View.GONE);
+        locBox.setVisibility(kindIdx >= 1 ? View.VISIBLE : View.GONE);
         if (winBox != null) winBox.setVisibility(kindIdx >= 1 ? View.VISIBLE : View.GONE);
         if (chkBox != null) chkBox.setVisibility(kindIdx == 2 ? View.VISIBLE : View.GONE);
-        if (scheduleBox != null) {
-            scheduleBox.setVisibility(kindIdx == 2 ? View.GONE : View.VISIBLE);
+        // 打卡固定每天，不显示重复；其它类型正常显示
+        if (repeatBox != null) repeatBox.setVisibility(kindIdx == 2 ? View.GONE : View.VISIBLE);
+        refreshFallback();
+    }
+
+    /** 兜底时间滚轮：只有打卡 + 选了「设兜底」才显示 */
+    private void refreshFallback() {
+        if (fallbackRow != null) {
+            fallbackRow.setVisibility(kindIdx == 2 && fbIdx == 1 ? View.VISIBLE : View.GONE);
         }
     }
 
@@ -394,18 +406,19 @@ public class TodoEditActivity extends Activity {
         t.kind = kindIdx == 0 ? "time" : (kindIdx == 1 ? "location" : "checkin");
         t.rep = (kindIdx == 2 || repIdx == 1) ? "daily" : "once";
         if (kindIdx == 2) {
-            String w = Checkin.clean(wifiEt.getText().toString());
-            if (w.isEmpty()) {
-                Toast.makeText(this, "先填一个 WiFi 名称", Toast.LENGTH_SHORT).show();
+            if (t.place == null || t.place.isEmpty()) {
+                Toast.makeText(this, "请先选择一个打卡地点", Toast.LENGTH_SHORT).show();
                 return;
             }
-            t.wifi = w;
+            t.wifi = "";
             t.winStart = winStartSpin.value();
             t.winEnd = winEndSpin.value();
             if (toMin(t.winStart) > toMin(t.winEnd)) {
                 Toast.makeText(this, "开始时间不能晚于结束时间", Toast.LENGTH_SHORT).show();
                 return;
             }
+            t.fallback = fbIdx == 1 ? fallbackSpin.value() : "";
+            if (t.radius <= 0) t.radius = 300;
         } else if (kindIdx == 0) {
             t.winStart = timeSpin.value();
             t.winEnd = t.winStart;
@@ -426,9 +439,10 @@ public class TodoEditActivity extends Activity {
         long nid = Store.get(this).saveTodo(t);
         t.id = nid;
         AlarmScheduler.cancel(this, nid);
-        if (!t.isCheckin()) AlarmScheduler.schedule(this, t);
+        AlarmScheduler.schedule(this, t);
         if (t.isCheckin()) {
-            Toast.makeText(this, "连上或断开「" + t.wifi + "」时打开 WeLink 打卡", Toast.LENGTH_SHORT).show();
+            String tail = t.fallback.isEmpty() ? "" : ("，兜底 " + t.fallback);
+            Toast.makeText(this, "到「" + t.place + "」自动打卡" + tail, Toast.LENGTH_SHORT).show();
         } else if (t.isLocation()) {
             Toast.makeText(this, "到达「" + t.place + "」时提醒", Toast.LENGTH_SHORT).show();
         } else {

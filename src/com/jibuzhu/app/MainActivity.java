@@ -26,7 +26,6 @@ import com.jibuzhu.app.data.Store;
 import com.jibuzhu.app.data.Todo;
 import com.jibuzhu.app.trigger.AlarmScheduler;
 import com.jibuzhu.app.trigger.GeoService;
-import com.jibuzhu.app.trigger.WifiWatchService;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -154,16 +153,12 @@ public class MainActivity extends Activity {
     private void syncGeo() {
         try {
             boolean need = false;
-            boolean needWifi = false;
             Calendar now = Calendar.getInstance();
             String today = Util.today();
             for (Todo t : Store.get(this).todos()) {
                 if (!t.enabled) continue;
-                if (t.isCheckin() && t.wifi != null && !t.wifi.isEmpty()) {
-                    needWifi = true;
-                    continue;
-                }
-                if (!t.isLocation()) continue;
+                // 定位型和打卡型都靠定位服务触发
+                if (!t.isLocation() && !t.isCheckin()) continue;
                 if (!Util.dayMatches(t.rep, now)) continue;
                 if (!Util.inWindow(t.winStart, t.winEnd, now)) continue;
                 if (today.equals(t.lastFired)) continue;
@@ -171,8 +166,6 @@ public class MainActivity extends Activity {
             }
             if (need) startForegroundService(new Intent(this, GeoService.class));
             else stopService(new Intent(this, GeoService.class));
-            if (needWifi) startForegroundService(new Intent(this, WifiWatchService.class));
-            else stopService(new Intent(this, WifiWatchService.class));
 
         } catch (Exception ignored) {
         }
@@ -456,11 +449,14 @@ public class MainActivity extends Activity {
     private String condition(Todo t) {
         StringBuilder s = new StringBuilder();
         if ("checkin".equals(t.kind)) {
-            s.append("连上/断开 ").append(t.wifi == null || t.wifi.isEmpty() ? "未设 WiFi" : t.wifi);
+            s.append("到 ").append(t.place.isEmpty() ? "选定地点" : t.place);
             if (!t.winStart.equals("00:00") || !t.winEnd.equals("23:59")) {
                 s.append("  ").append(t.winStart).append("-").append(t.winEnd);
             }
-            s.append(" 打开打卡页");
+            s.append(" 自动打卡");
+            if (t.fallback != null && !t.fallback.isEmpty()) {
+                s.append("  ·  兜底 ").append(t.fallback);
+            }
         } else if (t.isLocation()) {
             s.append("到 ").append(t.place.isEmpty() ? "选定地点" : t.place);
             if (!t.winStart.equals("00:00") || !t.winEnd.equals("23:59")) {

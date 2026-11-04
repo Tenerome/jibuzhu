@@ -82,11 +82,6 @@
             android:exported="false" />
 
         <service
-            android:name=".trigger.WifiWatchService"
-            android:foregroundServiceType="location"
-            android:exported="false" />
-
-        <service
             android:name=".trigger.RingService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="false" />

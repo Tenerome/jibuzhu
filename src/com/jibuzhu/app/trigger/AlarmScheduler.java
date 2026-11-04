@@ -24,11 +24,11 @@ public class AlarmScheduler {
         cancel(ctx, t.id);
         if (!t.enabled) return;
 
-        // 时间型待办：到 winStart 就提醒
-        if (!t.isLocation() && !t.winStart.isEmpty()) {
+        // 时间型待办：到 winStart 就提醒。定位型/打卡型靠位置触发，不排主闹钟
+        if (!t.isLocation() && !t.isCheckin() && !t.winStart.isEmpty()) {
             setAt(ctx, am, t.id, "main", nextAt(t.winStart));
         }
-        // 兜底：到点还没触发就提醒（定位型/时间型都支持）
+        // 兜底：到点还没触发就提醒（三种类型都支持）
         if (!t.fallback.isEmpty()) {
             setAt(ctx, am, t.id, "fallback", nextAt(t.fallback));
         }
