@@ -52,9 +52,9 @@ public class AlarmReceiver extends BroadcastReceiver {
         }
         if ("once".equals(t.rep) && Util.today().equals(t.lastFired)) return;
 
-        // 打卡的兜底只是"催一下"，不能把今天标记成已处理 ——
-        // 否则用户被催完再走到地点，就不会自动打卡了。
-        boolean mark = !(t.isCheckin() && "fallback".equals(mode));
+        // 打卡不管是位置命中还是兜底时间催的，都算今天打过了：写 lastFired，
+        // 今天不再监听，明天 0 点自动恢复。
+        boolean mark = true;
         if (mark) {
             t.lastFired = Util.today();
             Store.get(ctx).saveTodo(t);

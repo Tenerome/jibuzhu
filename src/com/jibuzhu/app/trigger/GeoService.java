@@ -253,23 +253,32 @@ public class GeoService extends Service implements LocationListener {
         float acc = loc.hasAccuracy() ? loc.getAccuracy() : 100f;
         for (Todo t : list) {
             double d = Util.distance(loc.getLatitude(), loc.getLongitude(), t.lat, t.lng);
-            // 定位本身有误差（网络定位常在数百米），判定半径按误差放宽一点，
-            // 否则精度差的时候围栏永远命中不了。
-            double tol = Math.max(50, t.radius) + Math.min(acc, 150f);
+            // 打卡要更准：人一般在室外，GPS 够准，围栏收紧到 120 米，误差补偿也只给一点点，
+            // 免得在楼里晃一圈就打了好几次卡。普通位置提醒仍按 300 米，粗一点无所谓。
+            double tol;
+            if (t.isCheckin()) {
+                tol = 120 + Math.min(acc, 30f);
+            } else {
+                tol = Math.max(300, t.radius) + Math.min(acc, 100f);
+            }
             android.util.Log.d("JBZ-GEO", "todo=" + t.id + " d=" + ((int) d) + " acc=" + ((int) acc)
                     + " tol=" + ((int) tol) + " checkin=" + t.isCheckin());
             if (d <= tol) {
-                // 不在这里写 lastFired：唤起提醒可能失败（权限/后台限制），
-                // 写了当天就彻底不提醒了。只记一个内存里的"刚试过"，2 分钟内不重复唤起。
                 long nowMs = System.currentTimeMillis();
                 Long tried = triedAt.get(t.id);
-                if (tried != null && nowMs - tried < 120_000L) {
+                if (tried != null && nowMs - tried < 60_000L) {
                     android.util.Log.d("JBZ-GEO", "hit but tried recently id=" + t.id);
                     continue;
                 }
                 triedAt.put(t.id, nowMs);
                 android.util.Log.d("JBZ-GEO", "HIT id=" + t.id + " d=" + ((int) d)
                         + " checkin=" + t.isCheckin() + " locked=" + locked());
+                // 打卡命中一次就算今天打过了：写 lastFired，今天不再监听，
+                // 明天 0 点由 Store.todos() 的复位逻辑自动恢复。
+                if (t.isCheckin()) {
+                    t.lastFired = Util.today();
+                    Store.get(this).saveTodo(t);
+                }
                 if (t.isCheckin()) {
                     // 打卡：锁屏就走闹钟式提醒（点「去打卡」后跳 WeLink）；
                     // 没锁屏直接跳过去，不响铃。
