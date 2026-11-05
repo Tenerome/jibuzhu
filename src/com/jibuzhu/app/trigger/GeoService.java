@@ -277,6 +277,10 @@ public class GeoService extends Service implements LocationListener {
                 // 明天 0 点由 Store.todos() 的复位逻辑自动恢复。
                 if (t.isCheckin()) {
                     t.lastFired = Util.today();
+                    // 自动 check：表现得跟用户手动勾掉一样（变灰置底），
+                    // 次日 0 点由 Store.todos() 的复位逻辑自动恢复。
+                    t.done = true;
+                    t.doneAt = nowMs;
                     Store.get(this).saveTodo(t);
                 }
                 if (t.isCheckin()) {

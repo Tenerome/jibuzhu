@@ -53,12 +53,13 @@ public class AlarmReceiver extends BroadcastReceiver {
         if ("once".equals(t.rep) && Util.today().equals(t.lastFired)) return;
 
         // 打卡不管是位置命中还是兜底时间催的，都算今天打过了：写 lastFired，
-        // 今天不再监听，明天 0 点自动恢复。
-        boolean mark = true;
-        if (mark) {
-            t.lastFired = Util.today();
-            Store.get(ctx).saveTodo(t);
+        // 同时自动 check（变灰置底），今天不再监听，明天 0 点自动恢复。
+        t.lastFired = Util.today();
+        if (t.isCheckin()) {
+            t.done = true;
+            t.doneAt = System.currentTimeMillis();
         }
+        Store.get(ctx).saveTodo(t);
 
         showFullScreen(ctx, t, mode);
         AlarmScheduler.schedule(ctx, t);
