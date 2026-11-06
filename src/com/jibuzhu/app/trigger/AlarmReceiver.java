@@ -51,6 +51,11 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
         if ("once".equals(t.rep) && Util.today().equals(t.lastFired)) return;
+        // 打卡今天已经打过（位置命中或兜底催过）就彻底安静，别再响兜底闹钟
+        if (t.isCheckin() && (Util.today().equals(t.lastFired) || t.done)) {
+            AlarmScheduler.schedule(ctx, t);
+            return;
+        }
 
         // 打卡不管是位置命中还是兜底时间催的，都算今天打过了：写 lastFired，
         // 同时自动 check（变灰置底），今天不再监听，明天 0 点自动恢复。

@@ -166,6 +166,7 @@ public class GeoService extends Service implements LocationListener {
             else if (!Util.dayMatches(t.rep, now)) why = "day";
             else if (!Util.inWindow(t.winStart, t.winEnd, now)) why = "window "
                     + t.winStart + "-" + t.winEnd;
+            else if (t.done) why = "done";
             else if (today.equals(t.lastFired)) why = "fired";
             if (why != null) {
                 android.util.Log.d("JBZ-GEO", "skip id=" + t.id + " " + why);
