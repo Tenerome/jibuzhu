@@ -34,8 +34,8 @@ public class AlarmScheduler {
         if ((t.isLocation() || t.isCheckin()) && !t.winStart.isEmpty()) {
             setSilent(ctx, am, t.id, "geoStart", nextAt(t.winStart));
         }
-        // 兜底：到点还没触发就提醒（三种类型都支持）
-        if (!t.fallback.isEmpty()) {
+        // 兜底：到点还没触发就提醒（打卡不设兜底）
+        if (!t.isCheckin() && !t.fallback.isEmpty()) {
             setAt(ctx, am, t.id, "fallback", nextAt(t.fallback));
         }
     }
@@ -55,6 +55,13 @@ public class AlarmScheduler {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /** 保活心跳：每 15 分钟把定位服务拉一次，防止被系统/厂商后台清理掉后彻底不工作 */
+    public static void keepAlive(Context ctx) {
+        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        setSilent(ctx, am, 999999L, "keepalive", System.currentTimeMillis() + 15 * 60 * 1000L);
     }
 
     /** 距离下一次 hh:mm 还有多少毫秒，今天已过则顺延到明天 */

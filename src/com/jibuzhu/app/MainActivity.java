@@ -26,7 +26,6 @@ import com.jibuzhu.app.data.Store;
 import com.jibuzhu.app.data.Todo;
 import com.jibuzhu.app.trigger.AlarmScheduler;
 import com.jibuzhu.app.trigger.GeoService;
-
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashSet;
@@ -183,7 +182,7 @@ public class MainActivity extends Activity {
                 break;
             }
             android.util.Log.d("JBZ-GEO", "syncGeo need=" + need);
-            if (need) startForegroundService(new Intent(this, GeoService.class));
+            if (need) { startForegroundService(new Intent(this, GeoService.class)); AlarmScheduler.keepAlive(this); }
             else stopService(new Intent(this, GeoService.class));
 
         } catch (Exception e) {

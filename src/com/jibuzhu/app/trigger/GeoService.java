@@ -76,6 +76,11 @@ public class GeoService extends Service implements LocationListener {
             android.util.Log.e("JBZ-GEO", "startForeground fail: " + e);
         }
         scheduleTick(0);
+        // 服务活着就顺手续上保活心跳（15 分钟一次），被杀掉后还能被拉回来
+        try {
+            AlarmScheduler.keepAlive(this);
+        } catch (Exception ignored) {
+        }
         return START_STICKY;
     }
 

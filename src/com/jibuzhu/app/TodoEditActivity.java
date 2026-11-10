@@ -33,16 +33,12 @@ public class TodoEditActivity extends Activity {
     private EditText titleEt;
     private TimeSpinner timeSpin;        // 时间提醒的时刻 / 定位提醒的窗口起
     private TimeSpinner winStartSpin, winEndSpin;
-    private LinearLayout chkBox;         // 打卡：兜底时间
     private LinearLayout winBox;
     private TextView winLabel;
     private TextView placeBtn, ringName;
     private LinearLayout bodyBox, timeBox, locBox, repeatBox, ringBox;
-    private TimeSpinner fallbackSpin;
-    private LinearLayout fallbackRow;
     private int kindIdx;                 // 0 时间 / 1 定位 / 2 打卡
     private int repIdx;                  // 0 单次 / 1 每天
-    private int fbIdx;                   // 0 不设兜底 / 1 设兜底（仅打卡用）
     private String ring = "";
     private MediaPlayer preview;
     private Button tryBtn;
@@ -58,7 +54,6 @@ public class TodoEditActivity extends Activity {
         if (t == null) t = new Todo();
         kindIdx = t.isCheckin() ? 2 : (t.isLocation() ? 1 : 0);
         repIdx = "daily".equals(t.rep) ? 1 : 0;
-        fbIdx = (t.fallback == null || t.fallback.isEmpty()) ? 0 : 1;
         ring = t.ring == null ? "" : t.ring;
         build();
     }
@@ -158,25 +153,7 @@ public class TodoEditActivity extends Activity {
         bodyBox.addView(locBox);
         bodyBox.addView(winBox);
 
-        // ---- 打卡：兜底时间（到点还没到地点才响，不跳 WeLink）----
-        chkBox = Ui.col(this);
-        chkBox.addView(Ui.label(this, "兜底时间（到点还没到地点，就响铃提醒）"));
-        chkBox.addView(Ui.segmented(this, new String[]{"不设兜底", "设兜底"}, fbIdx,
-                new Ui.OnPick() {
-                    @Override
-                    public void onPick(int index) {
-                        fbIdx = index;
-                        refreshFallback();
-                    }
-                }));
-        fallbackRow = Ui.row(this);
-        String fbCur = (t.fallback == null || t.fallback.isEmpty())
-                ? (!t.winStart.isEmpty() && !"00:00".equals(t.winStart) ? t.winStart : "")
-                : t.fallback;
-        fallbackSpin = new TimeSpinner(this, fbCur);
-        fallbackRow.addView(fallbackSpin);
-        chkBox.addView(fallbackRow);
-        bodyBox.addView(chkBox);
+        // ---- 打卡不再设兜底时间：到地点就打卡，没到就等下一次定位 ----
 
 
 
@@ -260,17 +237,8 @@ public class TodoEditActivity extends Activity {
         timeBox.setVisibility(kindIdx == 0 ? View.VISIBLE : View.GONE);
         locBox.setVisibility(kindIdx >= 1 ? View.VISIBLE : View.GONE);
         if (winBox != null) winBox.setVisibility(kindIdx >= 1 ? View.VISIBLE : View.GONE);
-        if (chkBox != null) chkBox.setVisibility(kindIdx == 2 ? View.VISIBLE : View.GONE);
         // 打卡固定每天，不显示重复；其它类型正常显示
         if (repeatBox != null) repeatBox.setVisibility(kindIdx == 2 ? View.GONE : View.VISIBLE);
-        refreshFallback();
-    }
-
-    /** 兜底时间滚轮：只有打卡 + 选了「设兜底」才显示 */
-    private void refreshFallback() {
-        if (fallbackRow != null) {
-            fallbackRow.setVisibility(kindIdx == 2 && fbIdx == 1 ? View.VISIBLE : View.GONE);
-        }
     }
 
     private String placeText() {
@@ -417,7 +385,7 @@ public class TodoEditActivity extends Activity {
                 Toast.makeText(this, "开始时间不能晚于结束时间", Toast.LENGTH_SHORT).show();
                 return;
             }
-            t.fallback = fbIdx == 1 ? fallbackSpin.value() : "";
+            t.fallback = "";
             if (t.radius <= 0) t.radius = 300;
         } else if (kindIdx == 0) {
             t.winStart = timeSpin.value();

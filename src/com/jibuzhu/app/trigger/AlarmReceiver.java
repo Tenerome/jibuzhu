@@ -28,6 +28,27 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (mode == null) mode = "main";
         if (id <= 0) return;
 
+        // 保活心跳：每 15 分钟把定位服务拉一次，防止被系统/厂商后台清理杀掉后
+        // 一直躺着不动（表现为锁屏时状态栏没有定位标志、到地点不提醒）。
+        if ("keepalive".equals(mode)) {
+            boolean need = false;
+            for (Todo t : Store.get(ctx).todos()) {
+                if (t.enabled && (t.isLocation() || t.isCheckin())) {
+                    need = true;
+                    break;
+                }
+            }
+            if (need) {
+                try {
+                    ctx.startForegroundService(new Intent(ctx, GeoService.class));
+                } catch (Exception e) {
+                    android.util.Log.e("JBZ-GEO", "keepalive start fail: " + e);
+                }
+                AlarmScheduler.keepAlive(ctx);
+            }
+            return;
+        }
+
         // 定位待办的时间段开始了：把定位服务唤起来，让它立刻开始定位。
         // 不能只靠服务自己的定时 —— 锁屏进 doze 之后 Handler 的定时会被冻住，
         // 时段到了没人重新评估，表现就是锁屏时状态栏一直没有定位标志。
