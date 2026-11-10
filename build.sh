@@ -43,7 +43,7 @@ echo "[5/5] 对齐与签名"
 zipalign -f 4 $OUT/app-unsigned.apk $OUT/app-aligned.apk
 java -jar $BT/lib/apksigner.jar sign \
   --ks build/ksig --ks-pass pass:123456 --ks-key-alias app \
-  --min-sdk-version 26 --v1-signing-enabled true --v2-signing-enabled true \
+  --min-sdk-version 26 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled false \
   --out $OUT/app-signed.apk $OUT/app-aligned.apk
 java -jar $BT/lib/apksigner.jar verify --print-certs $OUT/app-signed.apk | head -3
 ls -la $OUT/app-signed.apk
