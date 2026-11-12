@@ -72,8 +72,10 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
         if ("once".equals(t.rep) && Util.today().equals(t.lastFired)) return;
-        // 打卡今天已经打过（位置命中或兜底催过）就彻底安静，别再响兜底闹钟
-        if (t.isCheckin() && (Util.today().equals(t.lastFired) || t.done)) {
+        // 打卡今天已经打过（兜底催过）就彻底安静，别再响兜底闹钟。
+        // 但 "geo" 是 GeoService 刚命中后临时排的立即闹钟，它一定是打点的那一刻发出的，
+        // 必须放行，否则命中后 lastFired/done 已写、闹钟到达时被这里吞掉，锁屏就再也不弹。
+        if (t.isCheckin() && !"geo".equals(mode) && (Util.today().equals(t.lastFired) || t.done)) {
             AlarmScheduler.schedule(ctx, t);
             return;
         }
