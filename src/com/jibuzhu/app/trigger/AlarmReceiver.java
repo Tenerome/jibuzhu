@@ -98,6 +98,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         try {
             Intent si = new Intent(ctx, RingService.class);
             si.putExtra(AlarmScheduler.EXTRA_ID, t.id);
+            si.putExtra("mode", mode);
             if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(si);
             else ctx.startService(si);
         } catch (Exception ignored) {

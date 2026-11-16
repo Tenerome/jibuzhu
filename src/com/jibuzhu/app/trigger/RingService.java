@@ -71,8 +71,25 @@ public class RingService extends Service {
         }
 
         long id = intent == null ? -1 : intent.getLongExtra(AlarmScheduler.EXTRA_ID, -1);
+        String mode = intent == null ? null : intent.getStringExtra("mode");
+        if (mode == null || mode.isEmpty()) mode = "main";
         if (mp == null) startRing(id);
         wakeScreen();
+
+        // 锁屏/熄屏时用 SYSTEM_ALERT_WINDOW 全屏悬浮窗顶上，这是唯一能稳定压在
+        // 锁屏之上的方式（普通 Activity 会被锁屏盖回去，全屏通知在 Android 14+ 默认被拒）。
+        // 悬浮窗成功就不再抢 Activity，失败才走下面 kick 的老路。
+        if (id > 0) {
+            try {
+                Todo t = Store.get(this).todo(id);
+                if (t != null && RingOverlay.show(this, t, mode)) {
+                    android.util.Log.i("JBZ", "ring overlay shown, skip activity");
+                    return START_NOT_STICKY;
+                }
+            } catch (Exception e) {
+                android.util.Log.w("JBZ", "overlay failed: " + e);
+            }
+        }
 
         // 界面交给系统的全屏通知（fullScreenIntent）：只有系统拉起的全屏页才能点亮
         // 熄屏/AOD 的屏幕，应用自己 startActivity 只会"启动了但屏幕不亮"。
@@ -90,7 +107,7 @@ public class RingService extends Service {
     private final Runnable kick = new Runnable() {
         @Override
         public void run() {
-            if (RingActivity.alive || kickId <= 0 || kickTries >= 10) return;
+            if (RingActivity.alive || RingOverlay.showing() || kickId <= 0 || kickTries >= 10) return;
             kickTries++;
             try {
                 Intent ri = new Intent(RingService.this, RingActivity.class)
