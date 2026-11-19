@@ -26,6 +26,10 @@ import com.jibuzhu.app.data.Todo;
 public class RingService extends Service {
 
     public static final String CH = "ringing_v1";
+
+    /** 响铃服务是否在跑。RingActivity 用它挡掉系统补发的迟到启动（点了按钮还会再弹一次）。 */
+    public static volatile boolean running = false;
+
     private MediaPlayer mp;
     private android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
     private int kickTries;
@@ -55,6 +59,7 @@ public class RingService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        running = true;
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         NotificationChannel ch = new NotificationChannel(CH, "闹钟响铃", NotificationManager.IMPORTANCE_LOW);
         ch.setSound(null, null);
@@ -171,6 +176,7 @@ public class RingService extends Service {
 
     @Override
     public void onDestroy() {
+        running = false;
         ui.removeCallbacks(kick);
         kickId = -1;
         com.jibuzhu.app.RingOverlay.hide(this);

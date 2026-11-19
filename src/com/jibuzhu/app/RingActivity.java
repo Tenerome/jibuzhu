@@ -51,6 +51,13 @@ public class RingActivity extends Activity {
         todoId = getIntent().getLongExtra("todo_id", -1);
         String mode = getIntent().getStringExtra("mode");
         Todo t = Store.get(this).todo(todoId);
+        // 服务已经停了，说明这次提醒早被处理过（用户点了按钮，或点了通知）。
+        // 这里拦一道，挡住 Android 10+「pending launch」补发的迟到启动——否则用户点完
+        // 按钮、解锁回到记不住时，被系统补发的这个页面又会弹一次。
+        if (t == null || !RingService.running) {
+            finish();
+            return;
+        }
 
         setContentView(RingUi.build(this, t, mode, new Runnable() {
             @Override

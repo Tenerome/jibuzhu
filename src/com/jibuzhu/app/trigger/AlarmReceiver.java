@@ -108,13 +108,10 @@ public class AlarmReceiver extends BroadcastReceiver {
                 .putExtra("todo_id", t.id)
                 .putExtra("mode", mode)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        // 有「显示在其他应用上层」权限时，后台直接 startActivity 是被系统允许的，
-        // 而且比等系统走全屏通知（Android 14+ 默认拦截，要用户手动开）快得多。
-        // 先试一把，不行还有 notifications 和 RingService 的重试兜底。
-        try {
-            ctx.startActivity(ri);
-        } catch (Exception ignored) {
-        }
+        // 这里**故意不直接 startActivity**：Android 10+ 后台启动 Activity 被拒后，系统会把它
+        // 塞进「pending launch」队列，等用户下次跟本 app 交互时补发——表现就是"点了去打卡/
+        // 已完成、解锁后回到记不住，提醒页又弹一次"。界面统一交给 RingService：有悬浮窗权限
+        // 就弹悬浮窗（能压在锁屏上），没有权限才在服务里重试拉起 Activity。
 
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
         NotificationChannel ch = new NotificationChannel(CHANNEL, "待办提醒", NotificationManager.IMPORTANCE_HIGH);
